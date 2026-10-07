@@ -58,21 +58,43 @@ def get_account_id():
 def _serialize_instance(instance, challenge):
     """Build the JSON payload for an instance."""
     info = instance.connection_info or {}
+    connection = {
+        'host': instance.connection_host,
+        'port': instance.connection_port,
+        'ports': instance.connection_ports,
+        'type': info.get('type'),
+        'info': info.get('info'),
+        'urls': info.get('urls'),
+    }
+    if info.get('type') == 'ssh' and challenge:
+        connection['ssh_username'] = challenge.ssh_username
+        connection['ssh_password'] = challenge.ssh_password
     return {
         'instance_uuid': instance.uuid,
         'status': instance.status,
-        'connection': {
-            'host': instance.connection_host,
-            'port': instance.connection_port,
-            'ports': instance.connection_ports,
-            'type': info.get('type'),
-            'info': info.get('info'),
-            'urls': info.get('urls'),
-        },
+        'connection': connection,
         'expires_at': int(instance.expires_at.timestamp() * 1000) if instance.expires_at else None,
         'renewal_count': instance.renewal_count or 0,
         'max_renewals': challenge.get_max_renewals() if challenge else 0,
         'renew_minutes': _renew_minutes(),
+    }
+
+
+def _active_instances(account_id):
+    return ContainerInstance.query.filter_by(
+        account_id=account_id
+    ).filter(
+        ContainerInstance.status.in_(['running', 'provisioning', 'pending'])
+    ).all()
+
+
+def _summarise_instance(instance):
+    """Short description of an instance for the container limit message."""
+    challenge = ContainerChallenge.query.get(instance.challenge_id)
+    return {
+        'challenge_id': instance.challenge_id,
+        'challenge_name': challenge.name if challenge else 'Unknown challenge',
+        'expires_at': int(instance.expires_at.timestamp() * 1000) if instance.expires_at else None,
     }
 
 
@@ -122,15 +144,12 @@ def request_container():
                                 instance_status=existing.status))
 
         max_containers = int(ContainerConfig.get('container_max_concurrent_count', 3) or 3)
-        running_count = ContainerInstance.query.filter_by(
-            account_id=account_id
-        ).filter(
-            ContainerInstance.status.in_(['running', 'provisioning', 'pending'])
-        ).count()
+        active = _active_instances(account_id)
 
-        if running_count >= max_containers:
+        if len(active) >= max_containers:
             return jsonify({
-                'error': f'You have reached the maximum number of concurrent containers ({max_containers})'
+                'error': f'You have reached the maximum number of concurrent containers ({max_containers})',
+                'active_containers': [_summarise_instance(instance) for instance in active],
             }), 403
 
         instance = container_service.create_instance(
@@ -257,4 +276,31 @@ def stop_container():
         return jsonify({'error': str(e)}), 400
     except Exception as e:  # noqa: BLE001
         logger.error(f"Container stop failed: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@user_bp.route('/stop_all', methods=['POST'])
+@authed_only
+@during_ctf_time_only
+@require_verified_emails
+@ratelimit(method='POST', limit=10, interval=60)
+def stop_all_containers():
+    """Stop every active container belonging to the player (or their team)."""
+    try:
+        user = get_current_user()
+        account_id, _ = get_account_id()
+
+        instances = _active_instances(account_id)
+        stopped = sum(
+            1 for instance in instances
+            if container_service.stop_instance(instance, user.id, reason='manual')
+        )
+        if stopped < len(instances):
+            return jsonify({'error': f'Stopped {stopped} of {len(instances)} containers'}), 500
+        return jsonify({'success': True, 'stopped': stopped})
+
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Container stop all failed: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500

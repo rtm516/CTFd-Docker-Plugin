@@ -33,6 +33,7 @@ from .services import (
     NotificationService,
     RedisExpirationService,
 )
+from . import legacy_migration
 from .utils import parse_flag_pattern
 from .routes import user_bp, admin_bp
 from .routes.user import set_services as set_user_services
@@ -48,7 +49,7 @@ EDITABLE_FIELDS = {
     'name', 'category', 'description', 'attribution', 'state', 'max_attempts',
     'requirements', 'next_id', 'value',
     'image', 'internal_port', 'internal_ports', 'command',
-    'connection_type', 'connection_info',
+    'connection_type', 'connection_info', 'ssh_username', 'ssh_password',
     'flag_mode', 'flag_prefix', 'flag_suffix', 'random_flag_length',
     'container_initial', 'container_minimum', 'container_decay', 'decay_function',
     'pids_limit',
@@ -523,6 +524,7 @@ def load(app: Flask):
     logger.info("Loading Container Challenge Plugin")
 
     app.db.create_all()
+    legacy_migration.run()
     _initialize_default_config()
 
     docker_socket = ContainerConfig.get('docker_socket', 'unix://var/run/docker.sock')

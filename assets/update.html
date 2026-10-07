@@ -119,16 +119,58 @@
 	<label>
 		Connect type<br>
 		<small class="form-text text-muted">
-			Connect via HTTP or TCP
+			Connect via HTTP, TCP or SSH
 		</small>
 	</label>
 	<select type="text" class="form-control" name="connection_type" placeholder="Connect via" id="connect-type"
-		title="Connect via web or tcp" required>
+		title="Connect via web, tcp or ssh" required>
 		<option value="" selected disabled>Choose a value...</option>
 		<option value="http">Web (HTTP)</option>
 		<option value="tcp">TCP</option>
+		<option value="ssh">SSH</option>
 	</select>
 </div>
+
+<div class="form-group" id="ssh-username-group">
+	<label>
+		SSH Username<br>
+		<small class="form-text text-muted">
+			Username players log in with
+		</small>
+	</label>
+	<input type="text" class="form-control" name="ssh_username" id="ssh-username-input" value="{{ challenge.ssh_username or '' }}" placeholder="Enter username">
+</div>
+
+<div class="form-group" id="ssh-password-group">
+	<label>
+		SSH Password<br>
+		<small class="form-text text-muted">
+			Password players log in with. Leave blank for key-based authentication.
+		</small>
+	</label>
+	<input type="password" class="form-control" name="ssh_password" value="{{ challenge.ssh_password or '' }}" placeholder="Enter password or leave blank">
+</div>
+
+<script>
+(function() {
+	const connectTypeSelect = document.getElementById('connect-type');
+	const sshUsernameGroup = document.getElementById('ssh-username-group');
+	const sshPasswordGroup = document.getElementById('ssh-password-group');
+	const sshUsernameInput = document.getElementById('ssh-username-input');
+
+	function toggleSSHFields() {
+		const isSSH = connectTypeSelect.value === 'ssh';
+		sshUsernameGroup.classList.toggle('d-none', !isSSH);
+		sshPasswordGroup.classList.toggle('d-none', !isSSH);
+		sshUsernameInput.required = isSSH;
+	}
+
+	// update.js also sets the saved type, but the fields need to be right on first paint
+	connectTypeSelect.value = container_connection_type_selected;
+	toggleSSHFields();
+	connectTypeSelect.addEventListener('change', toggleSSHFields);
+})();
+</script>
 
 <div class="form-group">
 	<label>
@@ -203,3 +245,8 @@
 	value="{{ challenge.random_flag_length|default(0) }}" />
 
 {% endblock %}
+{# CTFd 3.8+ adds its own scoring fields. The plugin handles scoring above, so hide them #}
+{% block function %}{% endblock %}
+{% block initial %}{% endblock %}
+{% block decay %}{% endblock %}
+{% block minimum %}{% endblock %}

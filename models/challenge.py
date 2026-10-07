@@ -42,6 +42,10 @@ class ContainerChallenge(Challenges):
         name="connection_info"
     )  # Extra info to display
 
+    # Login details shown to players for SSH challenges
+    ssh_username = db.Column(db.Text, nullable=True)
+    ssh_password = db.Column(db.Text, nullable=True)
+
     # Resource limits (deprecated - use global config)
     # Kept for backward compatibility, but values are ignored
     memory_limit = db.Column(db.String(20), nullable=True)

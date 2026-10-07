@@ -161,6 +161,72 @@ function appendExtraInfo(parent, info) {
     parent.append(document.createElement("br"), small);
 }
 
+function copyToClipboard(text, button) {
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text);
+    } else {
+        // The Clipboard API is only available over HTTPS
+        var textarea = document.createElement("textarea");
+        textarea.value = text;
+        document.body.append(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+    }
+    button.textContent = "Copied";
+    setTimeout(function () { button.textContent = "Copy"; }, 2000);
+}
+
+// Lays out [label, value] rows in aligned columns: label | value | copy button
+function createCopyTable(rows) {
+    var table = document.createElement("table");
+    table.className = "mx-auto mt-2 text-start";
+
+    rows.forEach(function (item) {
+        var label = item[0];
+        var value = String(item[1]);
+        var row = table.insertRow();
+
+        var labelCell = row.insertCell();
+        labelCell.className = "text-end fw-bold pe-2 py-1";
+        labelCell.textContent = label;
+
+        var code = document.createElement("code");
+        code.className = "text-break";
+        code.textContent = value;
+        var valueCell = row.insertCell();
+        valueCell.className = "pe-2 py-1";
+        valueCell.append(code);
+
+        var button = document.createElement("button");
+        button.type = "button";
+        button.className = "btn btn-sm btn-outline-secondary py-0 w-100";
+        button.textContent = "Copy";
+        button.onclick = function () { copyToClipboard(value, button); };
+        row.insertCell().append(button);
+    });
+    return table;
+}
+
+function sshRows(connection, port) {
+    var username = connection.ssh_username || "user";
+    // Support both password-based and key-based SSH authentication
+    var command = "ssh -o StrictHostKeyChecking=no " + username + "@" + connection.host + " -p" + port;
+    if (connection.ssh_password) {
+        command = "sshpass -p" + connection.ssh_password + " " + command;
+    }
+    var rows = [
+        ["Command:", command],
+        ["Host:", connection.host],
+        ["Port:", port],
+        ["Username:", username],
+    ];
+    if (connection.ssh_password) {
+        rows.push(["Password:", connection.ssh_password]);
+    }
+    return rows;
+}
+
 function renderConnectionInfo(connection, parent) {
     if (!connection) return;
     var info = connection.info;
@@ -178,15 +244,14 @@ function renderConnectionInfo(connection, parent) {
     var hasPorts = ports && Object.keys(ports).length > 0;
     var type = (connection.type || "").toLowerCase();
 
-    if (type === "tcp" || type === "nc" || type === "ssh") {
+    if (type === "ssh") {
+        var sshPort = hasPorts ? Object.values(ports)[0] : connection.port;
+        parent.append(createCopyTable(sshRows(connection, sshPort)));
+    } else if (type === "tcp" || type === "nc") {
         var targets = hasPorts ? Object.values(ports) : [connection.port];
         targets.forEach(function (external) {
             var code = document.createElement("code");
-            if (type === "ssh") {
-                code.textContent = "ssh -p " + external + " user@" + connection.host;
-            } else {
-                code.textContent = "nc " + connection.host + " " + external;
-            }
+            code.textContent = "nc " + connection.host + " " + external;
             parent.append(code, document.createElement("br"));
         });
     } else if (type === "https") {
@@ -331,6 +396,64 @@ function view_container_info(challenge_id) {
         });
 }
 
+// Container limit reached: list the player's running containers so they know
+// which to stop, with a button to stop them all
+function showActiveContainers(containers) {
+    var alert = el("deployment-info");
+    if (!alert) return;
+
+    var list = document.createElement("ul");
+    list.className = "text-start mt-2 mb-2";
+    containers.forEach(function (container) {
+        var item = document.createElement("li");
+        item.textContent = container.challenge_name + " (" + formatExpiry(container.expires_at).toLowerCase() + ")";
+        list.append(item);
+    });
+
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn btn-danger btn-sm";
+    button.textContent = "Destroy all containers";
+    button.onclick = function () {
+        if (button.dataset.confirming !== "1") {
+            button.dataset.confirming = "1";
+            button.textContent = "Click again to confirm";
+            return;
+        }
+        container_stop_all();
+    };
+
+    alert.append(document.createElement("br"), "Your active containers:", list, button);
+}
+
+function container_stop_all() {
+    resetAlert();
+
+    fetch("/api/v1/containers/stop_all", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "CSRF-Token": init.csrfNonce
+        }
+    })
+        .then(function (response) { return response.json(); })
+        .then(function (data) {
+            if (data.error) {
+                showError(data.error);
+                return;
+            }
+            setAlert("All containers stopped. Click 'Fetch Instance' to start this one.");
+            hideChallengeUpdate();
+            toggleChallengeCreate();
+        })
+        .catch(function (error) {
+            console.error("[Container] Stop all error:", error);
+            showError("Error stopping containers.");
+        })
+        .finally(enableButtons);
+}
+
 function container_request(challenge_id) {
     resetAlert();
 
@@ -347,6 +470,9 @@ function container_request(challenge_id) {
         .then(function (data) {
             if (data.error) {
                 showError(data.error);
+                if (data.active_containers && data.active_containers.length) {
+                    showActiveContainers(data.active_containers);
+                }
                 return;
             }
             applyInstancePayload(data);
