@@ -28,10 +28,6 @@ class ContainerChallengeModel(Challenges):
     flag_prefix = db.Column(db.Text, default="")
     flag_suffix = db.Column(db.Text, default="")
 
-    def __init__(self, *args, **kwargs):
-        super(ContainerChallengeModel, self).__init__(**kwargs)
-        self.value = kwargs["initial"]
-
 
 class ContainerInfoModel(db.Model):
     __mapper_args__ = {"polymorphic_identity": "container_info"}

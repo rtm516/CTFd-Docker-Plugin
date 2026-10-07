@@ -3,14 +3,12 @@ from __future__ import division
 import time
 import json
 import datetime
-import math
 
 from flask import Blueprint, request, Flask, render_template, url_for, redirect, flash
 
-from CTFd.models import db, Solves, Teams, Users
+from CTFd.models import db, Teams, Users
 from CTFd.plugins import register_plugin_assets_directory
 from CTFd.plugins.challenges import CHALLENGE_CLASSES, BaseChallenge
-from CTFd.utils.modes import get_model
 from .models import ContainerChallengeModel, ContainerInfoModel, ContainerSettingsModel, ContainerFlagModel, ContainerCheatLog
 from .container_manager import ContainerManager, ContainerException
 from .admin_routes import admin_bp, set_container_manager as set_admin_manager
@@ -50,6 +48,7 @@ class ContainerChallenge(BaseChallenge):
             "initial": challenge.initial,
             "decay": challenge.decay,
             "minimum": challenge.minimum,
+            "function": challenge.function,
             "description": challenge.description,
             "connection_info": challenge.connection_info,
             "category": challenge.category,
@@ -64,75 +63,6 @@ class ContainerChallenge(BaseChallenge):
             },
         }
         return data
-
-    @classmethod
-    def calculate_value(cls, challenge):
-        # Check if challenge has dynamic scoring fields set
-        if challenge.initial is None or challenge.minimum is None or challenge.decay is None:
-            # No dynamic scoring configured, skip calculation
-            return challenge
-
-        Model = get_model()
-
-        solve_count = (
-            Solves.query.join(Model, Solves.account_id == Model.id)
-            .filter(
-                Solves.challenge_id == challenge.id,
-                Model.hidden == False,
-                Model.banned == False,
-            )
-            .count()
-        )
-
-        # If the solve count is 0 we shouldn't manipulate the solve count to
-        # let the math update back to normal
-        if solve_count != 0:
-            # We subtract -1 to allow the first solver to get max point value
-            solve_count -= 1
-
-        # It is important that this calculation takes into account floats.
-        # Hence this file uses from __future__ import division
-        value = (
-            ((challenge.minimum - challenge.initial) / (challenge.decay**2))
-            * (solve_count**2)
-        ) + challenge.initial
-
-        value = math.ceil(value)
-
-        if value < challenge.minimum:
-            value = challenge.minimum
-
-        challenge.value = value
-        db.session.commit()
-        return challenge
-
-    @classmethod
-    def update(cls, challenge, request):
-        """
-        This method is used to update the information associated with a challenge. This should be kept strictly to the
-        Challenges table and any child tables.
-        :param challenge:
-        :param request:
-        :return:
-        """
-        data = request.form or request.get_json()
-
-        for attr, value in data.items():
-            # We need to set these to floats so that the next operations don't operate on strings
-            if attr in ("initial", "minimum", "decay"):
-                value = float(value)
-            setattr(challenge, attr, value)
-
-        return ContainerChallenge.calculate_value(challenge)
-
-    @classmethod
-    def solve(cls, user, team, challenge, request):
-        super().solve(user, team, challenge, request)
-
-        # Refresh the challenge from database to ensure we have the full ContainerChallengeModel
-        # with all attributes, not just the base Challenges attributes
-        db.session.refresh(challenge)
-        cls.calculate_value(challenge)
 
     @classmethod
     def attempt(cls, challenge, request):

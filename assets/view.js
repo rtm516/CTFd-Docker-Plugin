@@ -69,6 +69,51 @@ function calculateExpiry(date) {
     return Math.ceil((new Date(date * 1000) - new Date()) / 1000 / 60);
 }
 
+function copyToClipboard(text, button) {
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text);
+    } else {
+        // The Clipboard API is only available over HTTPS
+        let textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.append(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+    }
+    button.textContent = 'Copied';
+    setTimeout(() => { button.textContent = 'Copy'; }, 2000);
+}
+
+// Lays out [label, value] rows in aligned columns: label | value | copy button
+function createCopyTable(rows) {
+    let table = document.createElement('table');
+    table.className = 'mx-auto mt-2 text-start';
+
+    rows.forEach(([label, value]) => {
+        let row = table.insertRow();
+
+        let labelCell = row.insertCell();
+        labelCell.className = 'text-end fw-bold pe-2 py-1';
+        labelCell.textContent = label;
+
+        let codeElement = document.createElement('code');
+        codeElement.className = 'text-break';
+        codeElement.textContent = value;
+        let valueCell = row.insertCell();
+        valueCell.className = 'pe-2 py-1';
+        valueCell.append(codeElement);
+
+        let button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-sm btn-outline-secondary py-0 w-100';
+        button.textContent = 'Copy';
+        button.onclick = () => copyToClipboard(String(value), button);
+        row.insertCell().append(button);
+    });
+    return table;
+}
+
 function createChallengeLinkElement(data, parent) {
     parent.innerHTML = "";
 
@@ -81,84 +126,21 @@ function createChallengeLinkElement(data, parent) {
         codeElement.textContent = 'nc ' + data.hostname + " " + data.port;
         parent.append(codeElement);
     } else if (data.connect == "ssh") {
-        let codeElement = document.createElement('code');
         // Support both password-based and key-based SSH authentication
-        if (data.ssh_password == null) {
-            codeElement.textContent = 'ssh -o StrictHostKeyChecking=no ' + data.ssh_username + '@' + data.hostname + " -p" + data.port;
-        } else {
-            codeElement.textContent = 'sshpass -p' + data.ssh_password + " ssh -o StrictHostKeyChecking=no " + data.ssh_username + '@' + data.hostname + " -p" + data.port;
-        }
-        parent.append(codeElement);
-    } else if (data.connect == "web-ssh") {
-        // Web-SSH: Show HTTP link and SSH credentials
-        let link = document.createElement('a');
-        link.href = 'http://' + data.hostname + ":" + data.port;
-        link.textContent = 'http://' + data.hostname + ":" + data.port;
-        link.target = '_blank';
-        parent.append(link, document.createElement('br'), document.createElement('br'));
-
-        // SSH Username
-        let usernameLabel = document.createElement('strong');
-        usernameLabel.textContent = 'SSH Username:';
-        parent.append(usernameLabel, document.createElement('br'));
-
-        let usernameContainer = document.createElement('div');
-        usernameContainer.style.display = 'flex';
-        usernameContainer.style.alignItems = 'center';
-        usernameContainer.style.gap = '8px';
-        usernameContainer.style.marginBottom = '8px';
-
-        let usernameCode = document.createElement('code');
-        usernameCode.textContent = data.ssh_username;
-        usernameCode.style.padding = '4px 8px';
-        usernameCode.style.backgroundColor = '#f4f4f4';
-        usernameCode.style.borderRadius = '4px';
-        usernameCode.style.flex = '1';
-
-        let usernameCopyBtn = document.createElement('button');
-        usernameCopyBtn.textContent = '📋';
-        usernameCopyBtn.className = 'btn btn-sm btn-secondary';
-        usernameCopyBtn.title = 'Copy username';
-        usernameCopyBtn.onclick = function() {
-            navigator.clipboard.writeText(data.ssh_username);
-            usernameCopyBtn.textContent = '✓';
-            setTimeout(() => { usernameCopyBtn.textContent = '📋'; }, 2000);
-        };
-
-        usernameContainer.append(usernameCode, usernameCopyBtn);
-        parent.append(usernameContainer);
-
-        // SSH Password (if present)
+        let command = 'ssh -o StrictHostKeyChecking=no ' + data.ssh_username + '@' + data.hostname + " -p" + data.port;
         if (data.ssh_password) {
-            let passwordLabel = document.createElement('strong');
-            passwordLabel.textContent = 'SSH Password:';
-            parent.append(passwordLabel, document.createElement('br'));
-
-            let passwordContainer = document.createElement('div');
-            passwordContainer.style.display = 'flex';
-            passwordContainer.style.alignItems = 'center';
-            passwordContainer.style.gap = '8px';
-
-            let passwordCode = document.createElement('code');
-            passwordCode.textContent = data.ssh_password;
-            passwordCode.style.padding = '4px 8px';
-            passwordCode.style.backgroundColor = '#f4f4f4';
-            passwordCode.style.borderRadius = '4px';
-            passwordCode.style.flex = '1';
-
-            let passwordCopyBtn = document.createElement('button');
-            passwordCopyBtn.textContent = '📋';
-            passwordCopyBtn.className = 'btn btn-sm btn-secondary';
-            passwordCopyBtn.title = 'Copy password';
-            passwordCopyBtn.onclick = function() {
-                navigator.clipboard.writeText(data.ssh_password);
-                passwordCopyBtn.textContent = '✓';
-                setTimeout(() => { passwordCopyBtn.textContent = '📋'; }, 2000);
-            };
-
-            passwordContainer.append(passwordCode, passwordCopyBtn);
-            parent.append(passwordContainer);
+            command = 'sshpass -p' + data.ssh_password + " " + command;
         }
+        let rows = [
+            ['Command:', command],
+            ['Host:', data.hostname],
+            ['Port:', data.port],
+            ['Username:', data.ssh_username],
+        ];
+        if (data.ssh_password) {
+            rows.push(['Password:', data.ssh_password]);
+        }
+        parent.append(createCopyTable(rows));
     } else {
         let link = document.createElement('a');
         link.href = 'http://' + data.hostname + ":" + data.port;

@@ -15,39 +15,12 @@
 
 {% block value %}
 <div class="form-group">
-	<label for="value">Current Value<br>
+	<label for="value">Value<br>
 		<small class="form-text text-muted">
-			This is how many points the challenge is worth right now.
+			This is how many points teams will receive once they solve this challenge.
 		</small>
 	</label>
-	<input type="number" class="form-control chal-value" name="value" value="{{ challenge.value }}" disabled>
-</div>
-
-<div class="form-group">
-	<label for="value">Initial Value<br>
-		<small class="form-text text-muted">
-			This is how many points the challenge was worth initially.
-		</small>
-	</label>
-	<input type="number" class="form-control chal-initial" name="initial" value="{{ challenge.initial }}" required>
-</div>
-
-<div class="form-group">
-	<label for="value">Decay Limit<br>
-		<small class="form-text text-muted">
-			The amount of solves before the challenge reaches its minimum value
-		</small>
-	</label>
-	<input type="number" class="form-control chal-decay" name="decay" value="{{ challenge.decay }}" required>
-</div>
-
-<div class="form-group">
-	<label for="value">Minimum Value<br>
-		<small class="form-text text-muted">
-			This is the lowest that the challenge can be worth
-		</small>
-	</label>
-	<input type="number" class="form-control chal-minimum" name="minimum" value="{{ challenge.minimum }}" required>
+	<input type="number" class="form-control chal-value" name="value" value="{{ challenge.value }}" required>
 </div>
 
 <div class="form-group">
@@ -70,16 +43,15 @@
 	<label>
 		Connect type<br>
 		<small class="form-text text-muted">
-			Connect via web, tcp, ssh, or web-ssh
+			Connect via web, tcp, or ssh
 		</small>
 	</label>
 	<select type="text" class="form-control" name="connection_type" placeholder="Connect via" id="connect-type"
-		title="Connect via web, tcp, ssh, or web-ssh" required>
+		title="Connect via web, tcp, or ssh" required>
 		<option value="" id="connect-type-default" selected disabled>Choose a value...</option>
 		<option value="web">Web</option>
 		<option value="tcp">TCP</option>
 		<option value="ssh">SSH</option>
-		<option value="web-ssh">Web-SSH</option>
 	</select>
 </div>
 
@@ -98,26 +70,6 @@
 		SSH Password<br>
 		<small class="form-text text-muted">
 			Password for SSH connection. Leave blank for key-based authentication.
-		</small>
-	</label>
-	<input type="password" class="form-control" name="ssh_password" value="{{ challenge.ssh_password }}" placeholder="Enter password or leave blank">
-</div>
-
-<div class="form-group">
-	<label>
-		SSH Username<br>
-		<small class="form-text text-muted">
-			Username for SSH connection (only used if connection type is SSH)
-		</small>
-	</label>
-	<input type="text" class="form-control" name="ssh_username" value="{{ challenge.ssh_username }}" placeholder="Enter username or leave blank">
-</div>
-
-<div class="form-group">
-	<label>
-		SSH Password<br>
-		<small class="form-text text-muted">
-			Password for SSH connection (only used if connection type is SSH). Leave blank for key-based authentication.
 		</small>
 	</label>
 	<input type="password" class="form-control" name="ssh_password" value="{{ challenge.ssh_password }}" placeholder="Enter password or leave blank">
@@ -215,7 +167,7 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+(function() {
 	const connectTypeSelect = document.getElementById('connect-type');
 	const sshUsernameGroup = document.getElementById('ssh-username-group');
 	const sshPasswordGroup = document.getElementById('ssh-password-group');
@@ -223,7 +175,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 	function toggleSSHFields() {
 		const connectionType = connectTypeSelect.value;
-		if (connectionType === 'ssh' || connectionType === 'web-ssh') {
+		if (connectionType === 'ssh') {
 			sshUsernameGroup.style.display = 'block';
 			sshPasswordGroup.style.display = 'block';
 			sshUsernameInput.setAttribute('required', 'required');
@@ -246,7 +198,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 	// Add change listener
 	connectTypeSelect.addEventListener('change', toggleSSHFields);
-});
+})();
 </script>
 
 {% endblock %}
